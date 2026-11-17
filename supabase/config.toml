@@ -1,0 +1,48 @@
+project_id = "life-os"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/auth/callback", "http://localhost:5173/auth/reset"]
+enable_signup = true
+minimum_password_length = 8
+password_requirements = "lower_upper_letters_digits"
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+double_confirm_changes = true
+secure_password_change = true
+
+# Google sign-in: set the client id/secret as env vars, then flip enabled to true (see docs/SETUP.md).
+[auth.external.google]
+enabled = false
+client_id = "env(GOOGLE_CLIENT_ID)"
+secret = "env(GOOGLE_CLIENT_SECRET)"
+
+[storage]
+enabled = true
+file_size_limit = "25MiB"
+
+[functions.ai-agent]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+# Secured by CRON_SECRET inside the function (called by schedulers, not by users).
+[functions.run-automations]
+verify_jwt = false
+
+[functions.send-push]
+verify_jwt = false
