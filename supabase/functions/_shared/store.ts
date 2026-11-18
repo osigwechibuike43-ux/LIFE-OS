@@ -66,7 +66,7 @@ export function createSupabaseStore(db: SupabaseClient, userId: string): ToolSto
       const { data, error } = await db.from('reminders').insert({ ...row, user_id: userId, source: 'ai' })
         .select('id,title,description,remind_at,priority,recurrence,status').single();
       if (error) fail('insertReminder', error);
-      return data;
+      return data as never;
     },
     async searchReminders(f) {
       let q = db.from('reminders').select('id,title,description,remind_at,priority,recurrence,status').eq('user_id', userId);
@@ -83,7 +83,7 @@ export function createSupabaseStore(db: SupabaseClient, userId: string): ToolSto
       const { data, error } = await db.from('notes').insert({ ...row, user_id: userId, source: 'ai' })
         .select('id,title,content_text,tags,updated_at').single();
       if (error) fail('insertNote', error);
-      return data;
+      return data as never;
     },
     async searchNotes(f) {
       const like = `%${escapeLike(f.query).replace(/[,()]/g, ' ')}%`;
@@ -105,7 +105,7 @@ export function createSupabaseStore(db: SupabaseClient, userId: string): ToolSto
       const { data, error } = await db.from('memories').insert({ ...row, user_id: userId, source: 'ai_confirmed' })
         .select('id,category,content,source,created_at').single();
       if (error) fail('insertMemory', error);
-      return data;
+      return data as never;
     },
 
     async scheduleForRange(start, end) {

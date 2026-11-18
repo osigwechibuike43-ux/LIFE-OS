@@ -44,7 +44,7 @@ const STUBS = `
 export async function createDb() {
   const db = new PGlite({ extensions: { pg_trgm } });
   await db.exec(STUBS);
-  const dir = path.resolve(__dirname, '../../supabase/migrations');
+  const dir = path.resolve(import.meta.dirname, '../../supabase/migrations');
   for (const f of readdirSync(dir).filter((x) => x.endsWith('.sql')).sort()) {
     await db.exec(readFileSync(path.join(dir, f), 'utf8'));
   }

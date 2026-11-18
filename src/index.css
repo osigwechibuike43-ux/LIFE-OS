@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens: "Calm Intelligence". RGB triplets so Tailwind opacity modifiers work. */
+:root {
+  --bg: 247 248 250;
+  --surface: 255 255 255;
+  --surface-2: 241 243 247;
+  --fg: 23 25 35;
+  --muted: 115 123 140;
+  --accent: 99 91 255;
+  --accent-fg: 255 255 255;
+  --line: 232 234 240;
+  --amber: 217 140 20;
+  --success: 22 163 74;
+  --warning: 217 119 6;
+  --danger: 220 38 38;
+  --shadow: 23 25 35;
+  color-scheme: light;
+}
+.dark {
+  --bg: 16 17 22;
+  --surface: 25 27 35;
+  --surface-2: 32 35 45;
+  --fg: 245 245 247;
+  --muted: 160 164 178;
+  --accent: 129 122 255;
+  --accent-fg: 16 17 22;
+  --line: 42 45 56;
+  --amber: 245 181 68;
+  --success: 52 211 153;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+  --shadow: 0 0 0;
+  color-scheme: dark;
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-bg font-sans text-fg antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+    overscroll-behavior-y: none;
+  }
+  h1, h2, h3 { @apply font-display tracking-tight; }
+  ::selection { background: rgb(var(--accent) / 0.25); }
+  :focus-visible { @apply outline-none ring-2 ring-accent/60 ring-offset-2 ring-offset-bg; }
+  * { scrollbar-width: thin; scrollbar-color: rgb(var(--line)) transparent; }
+}
+
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-surface shadow-soft; }
+  .field {
+    @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-fg placeholder:text-muted/70
+      transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25
+      disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .field[aria-invalid='true'] { @apply border-danger focus:ring-danger/25; }
+  .label { @apply mb-1.5 block text-xs font-medium text-muted; }
+  .skeleton { @apply relative overflow-hidden rounded-lg bg-surface-2; }
+  .skeleton::after {
+    content: ''; @apply absolute inset-0 -translate-x-full;
+    background: linear-gradient(90deg, transparent, rgb(var(--fg) / 0.06), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+  /* Soft amber glow used for the focus / completion hero tiles (from the reference design). */
+  .glow-amber {
+    background:
+      radial-gradient(120% 90% at 85% 0%, rgb(var(--amber) / 0.55), transparent 55%),
+      linear-gradient(160deg, rgb(var(--surface-2)), rgb(var(--surface)));
+  }
+  .glow-steel {
+    background:
+      radial-gradient(90% 70% at 80% 0%, rgb(var(--accent) / 0.22), transparent 60%),
+      linear-gradient(160deg, rgb(var(--surface-2)), rgb(var(--surface)));
+  }
+  .rich-text { @apply text-sm leading-7; }
+  .rich-text h1 { @apply mb-2 mt-4 text-2xl font-semibold; }
+  .rich-text h2 { @apply mb-2 mt-4 text-xl font-semibold; }
+  .rich-text p { @apply my-2; }
+  .rich-text ul { @apply my-2 list-disc pl-6; }
+  .rich-text ol { @apply my-2 list-decimal pl-6; }
+  .rich-text blockquote { @apply my-3 border-l-2 border-accent pl-4 text-muted; }
+  .rich-text a { @apply text-accent underline; }
+  .rich-text code { @apply rounded bg-surface-2 px-1 py-0.5 font-mono text-[0.85em]; }
+  .rich-text pre { @apply my-3 overflow-x-auto rounded-xl bg-surface-2 p-3 font-mono text-xs; }
+  .rich-text:empty::before { content: attr(data-placeholder); @apply text-muted/70; }
+  .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

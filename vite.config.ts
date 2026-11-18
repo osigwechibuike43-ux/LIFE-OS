@@ -1,11 +1,10 @@
-/// <reference types="vitest" />
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 
 export default defineConfig({
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+  resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   plugins: [
     react(),
     VitePWA({
@@ -45,11 +44,13 @@ export default defineConfig({
     target: 'es2022',
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
-          charts: ['recharts'],
-          motion: ['framer-motion'],
-          supabase: ['@supabase/supabase-js'],
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/recharts|d3-|victory-vendor/.test(id)) return 'charts';
+          if (id.includes('framer-motion') || id.includes('motion-dom')) return 'motion';
+          if (id.includes('@supabase')) return 'supabase';
+          if (/react-dom|react-router|\/react\/|scheduler/.test(id)) return 'react';
+          return undefined;
         },
       },
     },
