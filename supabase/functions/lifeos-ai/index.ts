@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { buildSystemPrompt, runAgent, runApprovedAction, sanitizeInput, type AgentEvent } from '../_shared/agent.ts';
 import { bearer, corsHeaders, json } from '../_shared/http.ts';
-import { resolveProvider, type ChatMessage } from '../_shared/providers.ts';
+import { resolveProviders, type ChatMessage } from '../_shared/providers.ts';
 import { createSupabaseStore } from '../_shared/store.ts';
 import { safeTimeZone } from '../_shared/time.ts';
 import type { ToolContext } from '../_shared/tools.ts';
@@ -72,8 +72,8 @@ Deno.serve(async (req) => {
   if (prefs && prefs.ai_enabled === false) {
     return json({ code: 'ai_disabled', message: 'The assistant is turned off in your AI preferences.' }, 403, cors);
   }
-  const provider = resolveProvider((k) => Deno.env.get(k), providerSettings?.provider, providerSettings?.model);
-  if (!provider) {
+  const providers = resolveProviders((k) => Deno.env.get(k), providerSettings?.provider, providerSettings?.model);
+  if (providers.length === 0) {
     return json({
       code: 'ai_not_configured',
       message: 'No AI provider is configured on the server. Set GROQ_API_KEY (or GEMINI_API_KEY / OPENAI_API_KEY) as an Edge Function secret.',
@@ -131,24 +131,39 @@ Deno.serve(async (req) => {
         controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
       send('meta', { conversation_id: conversationId });
       try {
-        const result = await runAgent({
-          cfg: provider, ctx, system, history, userMessage: message, conversationId,
-          signal: req.signal,
-          emit: (e: AgentEvent) => {
-            if (e.type === 'token') send('token', { text: e.text });
-            else if (e.type === 'tool') send('tool', e);
-            else send('confirmation', e);
-          },
-        });
-        await db.from('messages').insert({
-          conversation_id: conversationId, user_id: userId, role: 'assistant', content: result.text,
-          metadata: { provider: provider.name, tools: result.tools, pending_action_ids: result.pendingIds },
-        });
-        await db.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId!);
-        send('done', { ok: true });
-      } catch (e) {
-        console.error('agent failed', (e as Error)?.message);
+      let emitted = false;
+      let lastError: unknown = null;
+      // Try each configured provider (e.g. Groq, then Gemini). Fail over only if nothing was streamed yet,
+      // so a user never sees two different answers stitched together.
+      for (const provider of providers) {
+        try {
+          const result = await runAgent({
+            cfg: provider, ctx, system, history, userMessage: message, conversationId,
+            signal: req.signal,
+            emit: (e: AgentEvent) => {
+              emitted = true;
+              if (e.type === 'token') send('token', { text: e.text });
+              else if (e.type === 'tool') send('tool', e);
+              else send('confirmation', e);
+            },
+          });
+          await db.from('messages').insert({
+            conversation_id: conversationId, user_id: userId, role: 'assistant', content: result.text,
+            metadata: { provider: provider.name, tools: result.tools, pending_action_ids: result.pendingIds },
+          });
+          await db.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId!);
+          send('done', { ok: true });
+          lastError = null;
+          break;
+        } catch (e) {
+          lastError = e;
+          console.error(`provider ${provider.name} failed`, (e as Error)?.message);
+          if (emitted || req.signal.aborted) break;
+        }
+      }
+      if (lastError) {
         send('error', { code: 'provider_error', message: 'The AI provider could not complete that request. Please try again.' });
+      }
       } finally {
         controller.close();
       }

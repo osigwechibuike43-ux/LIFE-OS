@@ -6,23 +6,23 @@ export type ProviderName = 'groq' | 'gemini' | 'openai';
 
 interface ProviderSpec {
   baseUrl: string;
-  keyEnv: string;
-  modelEnv: string;
+  keyEnvs: string[];
+  modelEnvs: string[];
   defaultModel: string;
 }
 
 export const PROVIDERS: Record<ProviderName, ProviderSpec> = {
   groq: {
     baseUrl: 'https://api.groq.com/openai/v1',
-    keyEnv: 'GROQ_API_KEY', modelEnv: 'GROQ_MODEL', defaultModel: 'llama-3.3-70b-versatile',
+    keyEnvs: ['GROQ_API_KEY'], modelEnvs: ['GROQ_MODEL', 'GROQ_CHAT_MODEL'], defaultModel: 'llama-3.3-70b-versatile',
   },
   gemini: {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    keyEnv: 'GEMINI_API_KEY', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-2.0-flash',
+    keyEnvs: ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'], modelEnvs: ['GEMINI_MODEL', 'GEMINI_CHAT_MODEL'], defaultModel: 'gemini-2.0-flash',
   },
   openai: {
     baseUrl: 'https://api.openai.com/v1',
-    keyEnv: 'OPENAI_API_KEY', modelEnv: 'OPENAI_MODEL', defaultModel: 'gpt-4o-mini',
+    keyEnvs: ['OPENAI_API_KEY'], modelEnvs: ['OPENAI_MODEL'], defaultModel: 'gpt-4o-mini',
   },
 };
 
@@ -39,11 +39,20 @@ const MODEL_RE = /^[\w.\-:/]{1,100}$/;
  * Picks the provider: the user's choice if it is configured, else AI_DEFAULT_PROVIDER, else any configured one.
  * Returns null when no key is configured at all (the app then reports "not configured" instead of faking AI).
  */
-export function resolveProvider(
+const firstEnv = (env: (k: string) => string | undefined, keys: string[]) => {
+  for (const k of keys) { const v = env(k)?.trim(); if (v) return v; }
+  return undefined;
+};
+
+/**
+ * Every configured provider, best first: the user's choice, then AI_DEFAULT_PROVIDER, then groq, gemini, openai.
+ * The caller tries them in order, so one provider being rate-limited or down does not take the assistant offline.
+ */
+export function resolveProviders(
   env: (k: string) => string | undefined,
   preferred?: string | null,
   preferredModel?: string | null,
-): ProviderConfig | null {
+): ProviderConfig[] {
   const order: ProviderName[] = [];
   const push = (n: string | null | undefined) => {
     if (n && n in PROVIDERS && !order.includes(n as ProviderName)) order.push(n as ProviderName);
@@ -52,14 +61,24 @@ export function resolveProvider(
   push(env('AI_DEFAULT_PROVIDER'));
   (Object.keys(PROVIDERS) as ProviderName[]).forEach(push);
 
+  const out: ProviderConfig[] = [];
   for (const name of order) {
     const spec = PROVIDERS[name];
-    const apiKey = env(spec.keyEnv);
+    const apiKey = firstEnv(env, spec.keyEnvs);
     if (!apiKey) continue;
     const userModel = preferredModel && MODEL_RE.test(preferredModel) && name === preferred ? preferredModel : null;
-    return { name, baseUrl: spec.baseUrl, apiKey, model: userModel ?? env(spec.modelEnv) ?? spec.defaultModel };
+    out.push({ name, baseUrl: spec.baseUrl, apiKey, model: userModel ?? firstEnv(env, spec.modelEnvs) ?? spec.defaultModel });
   }
-  return null;
+  return out;
+}
+
+/** The single best provider, or null when none is configured (the app then says so instead of faking AI). */
+export function resolveProvider(
+  env: (k: string) => string | undefined,
+  preferred?: string | null,
+  preferredModel?: string | null,
+): ProviderConfig | null {
+  return resolveProviders(env, preferred, preferredModel)[0] ?? null;
 }
 
 export interface ChatMessage {

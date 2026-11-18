@@ -270,3 +270,14 @@ describe('prompt and input handling', () => {
     expect(p).toContain('2026-11-17T12:19:00+01:00');
   });
 });
+
+describe('multi-provider resolution', () => {
+  it('returns every configured provider in preference order for failover', async () => {
+    const { resolveProviders } = await import('../../supabase/functions/_shared/providers');
+    const env = (k: string) => ({ GROQ_API_KEY: 'g', GOOGLE_API_KEY: 'x', GEMINI_CHAT_MODEL: 'gemini-2.5-flash' } as Record<string, string>)[k];
+    expect(resolveProviders(env).map((p) => p.name)).toEqual(['groq', 'gemini']);
+    expect(resolveProviders(env, 'gemini').map((p) => p.name)).toEqual(['gemini', 'groq']);
+    expect(resolveProviders(env, 'gemini')[0].model).toBe('gemini-2.5-flash');
+    expect(resolveProviders(() => undefined)).toEqual([]);
+  });
+});
