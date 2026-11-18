@@ -17,7 +17,7 @@ const Body = z.union([
 ]);
 
 Deno.serve(async (req) => {
-  const cors = corsHeaders(req, Deno.env.get('ALLOWED_ORIGINS'));
+  const cors = corsHeaders(req, Deno.env.get('LIFEOS_ALLOWED_ORIGINS'));
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (req.method !== 'POST') return json({ code: 'method_not_allowed' }, 405, cors);
 
@@ -30,6 +30,7 @@ Deno.serve(async (req) => {
   const db = createClient(url, anon, {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false },
+    db: { schema: 'lifeos' },
   });
   const { data: userData, error: authError } = await db.auth.getUser(token);
   if (authError || !userData.user) return json({ code: 'unauthorized', message: 'Your session has expired. Sign in again.' }, 401, cors);

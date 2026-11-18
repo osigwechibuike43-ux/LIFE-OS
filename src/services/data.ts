@@ -6,11 +6,22 @@ import type {
   AppNotification, AutomationRule, AutomationRun, CalendarEvent, Category, Conversation, DailyPlan, DocumentRow,
   FocusSession, Memory, Message, Note, PendingAction, Profile, Recurrence, Reminder, Task, UserPreferences,
 } from '@/types/db';
-import { currentUserId, PAGE_SIZE, unwrap } from './api';
+import { currentUserId, friendlyDbError, PAGE_SIZE, unwrap } from './api';
+
+const DOCS_BUCKET = 'lifeos-documents';
 
 // ---- profile & preferences ------------------------------------------------------------
 export const profileApi = {
-  get: async (): Promise<Profile> => unwrap(supabase.from('profiles').select('*').single()),
+  /** Returns the profile, creating it (idempotently, server-side) the first time this account opens LIFE OS. */
+  get: async (): Promise<Profile> => {
+    const existing = await supabase.from('profiles').select('*').maybeSingle();
+    if (existing.error) throw new Error(friendlyDbError(existing.error));
+    if (existing.data) return existing.data as Profile;
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const created = await supabase.rpc('ensure_profile', { p_timezone: tz });
+    if (created.error) throw new Error(friendlyDbError(created.error));
+    return created.data as Profile;
+  },
   update: async (patch: Partial<Pick<Profile, 'display_name' | 'avatar_url' | 'primary_use_case' | 'interests' | 'timezone' | 'onboarding_completed'>>) => {
     const id = await currentUserId();
     return unwrap<Profile>(supabase.from('profiles').update(patch).eq('id', id).select('*').single());
@@ -166,26 +177,26 @@ export const documentApi = {
   },
   upload: async (file: File, category: string, storagePath: string): Promise<DocumentRow> => {
     const user_id = await currentUserId();
-    const up = await supabase.storage.from('documents').upload(`${user_id}/${storagePath}`, file, { contentType: file.type, upsert: false });
+    const up = await supabase.storage.from(DOCS_BUCKET).upload(`${user_id}/${storagePath}`, file, { contentType: file.type, upsert: false });
     if (up.error) throw new Error(up.error.message);
     const { data, error } = await supabase.from('documents')
       .insert({ user_id, name: file.name.slice(0, 255), category, storage_path: `${user_id}/${storagePath}`, mime_type: file.type, size_bytes: file.size })
       .select('*').single();
     if (error) {
-      await supabase.storage.from('documents').remove([`${user_id}/${storagePath}`]); // no orphaned files
+      await supabase.storage.from(DOCS_BUCKET).remove([`${user_id}/${storagePath}`]); // no orphaned files
       throw new Error(error.message);
     }
     return data as DocumentRow;
   },
   /** Short-lived signed URL; documents are never public. */
   signedUrl: async (path: string, download?: string | boolean) => {
-    const { data, error } = await supabase.storage.from('documents').createSignedUrl(path, 120, download ? { download } : undefined);
+    const { data, error } = await supabase.storage.from(DOCS_BUCKET).createSignedUrl(path, 120, download ? { download } : undefined);
     if (error || !data) throw new Error(error?.message ?? 'Could not open the file');
     return data.signedUrl;
   },
   update: async (id: string, patch: { name?: string; category?: string }) => unwrap<DocumentRow>(supabase.from('documents').update(patch).eq('id', id).select('*').single()),
   remove: async (doc: DocumentRow) => {
-    const rm = await supabase.storage.from('documents').remove([doc.storage_path]);
+    const rm = await supabase.storage.from(DOCS_BUCKET).remove([doc.storage_path]);
     if (rm.error) throw new Error(rm.error.message);
     return unwrap(supabase.from('documents').delete().eq('id', doc.id));
   },

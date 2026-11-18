@@ -1,5 +1,9 @@
 # Setup and deployment
 
+LIFE OS stores everything in its own Postgres schema, `lifeos`, so it can share a Supabase project with other apps (it does not touch `public`). It does not add any trigger to `auth.users`; each account is provisioned on first sign-in through `lifeos.ensure_profile()`.
+
+> **Required one-time step:** Supabase Dashboard > Settings > API > **Exposed schemas** > add `lifeos` > Save. Without it the app shows an "lifeos schema is not exposed" message.
+
 ## 1. Create the Supabase project
 1. Create a project at supabase.com. Note the project ref, API URL and anon/publishable key.
 2. Apply migrations in order (`supabase/migrations/*.sql`):
@@ -14,26 +18,30 @@
 ## 2. Auth
 - Authentication → URL Configuration: set Site URL to your deployed origin and add `http://localhost:5173` and `https://YOUR_DOMAIN/**` to redirect URLs (password reset and OAuth return there).
 - Email: keep "Confirm email" on for production; configure custom SMTP (the default sender is rate limited).
+- Google users skip onboarding and go straight to the dashboard. Add your site to Redirect URLs (e.g. `https://YOUR_DOMAIN/**`), otherwise Google returns users to the project's Site URL.
 - Google: Authentication → Providers → Google; add client ID/secret from Google Cloud Console and the Supabase callback URL as an authorised redirect.
 
 ## 3. Edge Functions and secrets
 ```bash
 cp supabase/functions/.env.example supabase/functions/.env   # fill values, never commit
 supabase secrets set --env-file supabase/functions/.env
-supabase functions deploy ai-agent
-supabase functions deploy run-automations --no-verify-jwt
-supabase functions deploy send-push --no-verify-jwt
-supabase functions deploy delete-account
+supabase functions deploy lifeos-ai
+supabase functions deploy lifeos-run-automations --no-verify-jwt
+supabase functions deploy lifeos-send-push --no-verify-jwt
+supabase functions deploy lifeos-delete-account
 ```
-Secrets: `GROQ_API_KEY` (+ optional `GEMINI_API_KEY`, `OPENAI_API_KEY`), `AI_DEFAULT_PROVIDER`, `CRON_SECRET`, `VAPID_*` (optional), `ALLOWED_ORIGINS` (set to your production origin, not `*`).
-`run-automations` and `send-push` are authenticated by `CRON_SECRET` (not a user JWT), which is why they are deployed with `--no-verify-jwt`.
+Secrets: `GROQ_API_KEY` (+ optional `GEMINI_API_KEY`, `OPENAI_API_KEY`), `AI_DEFAULT_PROVIDER`, `LIFEOS_CRON_SECRET`, `VAPID_*` (optional), `LIFEOS_ALLOWED_ORIGINS` (set to your production origin, not `*`).
+`lifeos-run-automations` and `lifeos-send-push` are authenticated by `LIFEOS_CRON_SECRET` (not a user JWT), which is why they are deployed with `--no-verify-jwt`.
+
+## 3b. Account deletion
+`Settings > Delete my data` erases only LIFE OS data (`lifeos.erase_my_data()` plus the user's files). The auth user is kept because it may be shared with other apps.
 
 ## 4. Scheduler
 Reminders and automations need a one-minute tick.
 - **pg_cron (preferred):** migration `0004` schedules `lifeos-tick` when the extension is available.
 - **Fallback:** call the function every minute from any scheduler (GitHub Actions, cron-job.org):
-  `curl -X POST https://YOUR_REF.supabase.co/functions/v1/run-automations -H "Authorization: Bearer $CRON_SECRET"`
-  If you use web push, call `/functions/v1/send-push` the same way every minute (pg_cron does not trigger it).
+  `curl -X POST https://YOUR_REF.supabase.co/functions/v1/lifeos-run-automations -H "Authorization: Bearer $LIFEOS_CRON_SECRET"`
+  If you use web push, call `/functions/v1/lifeos-send-push` the same way every minute (pg_cron does not trigger it).
 
 ## 5. Web push (optional)
 `npx web-push generate-vapid-keys` → public key to `VITE_VAPID_PUBLIC_KEY` and `VAPID_PUBLIC_KEY`, private key to `VAPID_PRIVATE_KEY`, set `VAPID_SUBJECT`. Without it, push is hidden and in-app notifications still work.
@@ -41,7 +49,7 @@ Reminders and automations need a one-minute tick.
 ## 6. Deploy the frontend (Vercel)
 1. Import the GitHub repo. Framework: Vite. `vercel.json` already sets SPA rewrites, security headers and caching.
 2. Environment variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, optional `VITE_VAPID_PUBLIC_KEY`.
-3. Deploy, then put the production URL into Supabase Site URL and `ALLOWED_ORIGINS`.
+3. Deploy, then put the production URL into Supabase Site URL and `LIFEOS_ALLOWED_ORIGINS`.
 
 ## 7. Post-deploy checklist
 - [ ] Sign up, confirm email, finish onboarding

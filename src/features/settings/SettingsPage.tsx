@@ -191,8 +191,8 @@ function PrivacySection() {
     setDeleting(true);
     try {
       const { data } = await supabase.auth.getSession();
-      const res = await fetch(`${env.supabaseUrl}/functions/v1/delete-account`, { method: 'POST', headers: { authorization: `Bearer ${data.session?.access_token}`, apikey: env.supabaseAnonKey, 'content-type': 'application/json' }, body: JSON.stringify({ confirm: 'DELETE' }) });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.message ?? 'Could not delete your account.');
+      const res = await fetch(`${env.supabaseUrl}/functions/v1/lifeos-delete-account`, { method: 'POST', headers: { authorization: `Bearer ${data.session?.access_token}`, apikey: env.supabaseAnonKey, 'content-type': 'application/json' }, body: JSON.stringify({ confirm: 'DELETE' }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.message ?? 'Could not delete your data.');
       await signOut().catch(() => undefined); qc.clear(); nav('/', { replace: true });
     } catch (e) { toast.error(errorMessage(e)); setDeleting(false); }
   }
@@ -205,12 +205,12 @@ function PrivacySection() {
       </div>
       <p className="text-xs text-muted">Read our <Link to="/privacy" className="text-accent hover:underline">Privacy Policy</Link> and <Link to="/terms" className="text-accent hover:underline">Terms</Link>.</p>
       <div className="rounded-xl border border-danger/30 bg-danger/5 p-4">
-        <p className="text-sm font-medium text-danger">Delete account</p>
-        <p className="mt-1 text-xs text-muted">Permanently deletes your account, documents and all data. This cannot be undone.</p>
-        <Button variant="danger" size="sm" className="mt-3" onClick={() => setOpen(true)}><Trash2 className="h-4 w-4" />Delete my account</Button>
+        <p className="text-sm font-medium text-danger">Delete my LIFE OS data</p>
+        <p className="mt-1 text-xs text-muted">Permanently deletes your tasks, notes, documents, memories and all other LIFE OS data, then signs you out. Your sign-in is kept because it is shared with other apps you may use. This cannot be undone.</p>
+        <Button variant="danger" size="sm" className="mt-3" onClick={() => setOpen(true)}><Trash2 className="h-4 w-4" />Delete my data</Button>
       </div>
-      <Modal open={open} onClose={() => !deleting && setOpen(false)} title="Delete account?" footer={<><Button variant="secondary" onClick={() => setOpen(false)} disabled={deleting}>Cancel</Button><Button variant="danger" disabled={confirm !== 'DELETE'} loading={deleting} onClick={deleteAccount}>Delete forever</Button></>}>
-        <p className="mb-4 text-sm text-muted">Everything will be erased. Consider exporting your data first. Type <strong className="text-fg">DELETE</strong> to confirm.</p>
+      <Modal open={open} onClose={() => !deleting && setOpen(false)} title="Delete all LIFE OS data?" footer={<><Button variant="secondary" onClick={() => setOpen(false)} disabled={deleting}>Cancel</Button><Button variant="danger" disabled={confirm !== 'DELETE'} loading={deleting} onClick={deleteAccount}>Delete forever</Button></>}>
+        <p className="mb-4 text-sm text-muted">All your LIFE OS data will be erased. Consider exporting your data first. Type <strong className="text-fg">DELETE</strong> to confirm.</p>
         <Input aria-label="Type DELETE to confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
       </Modal>
     </Section>

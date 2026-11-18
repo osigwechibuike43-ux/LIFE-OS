@@ -34,15 +34,15 @@ secret = "env(GOOGLE_CLIENT_SECRET)"
 enabled = true
 file_size_limit = "25MiB"
 
-[functions.ai-agent]
+[functions.lifeos-ai]
 verify_jwt = true
 
-[functions.delete-account]
+[functions.lifeos-delete-account]
 verify_jwt = true
 
-# Secured by CRON_SECRET inside the function (called by schedulers, not by users).
-[functions.run-automations]
+# Secured by LIFEOS_CRON_SECRET inside the function (called by schedulers, not by users).
+[functions.lifeos-run-automations]
 verify_jwt = false
 
-[functions.send-push]
+[functions.lifeos-send-push]
 verify_jwt = false

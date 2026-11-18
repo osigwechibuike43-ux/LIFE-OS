@@ -45,7 +45,7 @@ export function RequireOnboarded() {
   if (profile.isError) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg">
-        <ErrorState message="We could not load your profile. If this is a new project, check that the database migrations were applied." onRetry={() => profile.refetch()} />
+        <ErrorState message={`We could not load your profile. ${profile.error instanceof Error ? profile.error.message : ""}`.trim()} onRetry={() => profile.refetch()} />
       </div>
     );
   }

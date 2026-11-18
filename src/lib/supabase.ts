@@ -6,4 +6,6 @@ import { env } from './env';
 // never crash; the UI shows a setup screen instead of calling it.
 export const supabase = createClient(env.supabaseUrl || 'http://localhost:54321', env.supabaseAnonKey || 'not-configured', {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  // LIFE OS tables live in their own schema so the project can be shared with other apps.
+  db: { schema: 'lifeos' },
 });

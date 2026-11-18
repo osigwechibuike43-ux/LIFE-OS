@@ -3,7 +3,8 @@
 export function corsHeaders(req: Request, allowed: string | undefined): Record<string, string> {
   const origin = req.headers.get('origin') ?? '';
   const list = (allowed ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  const ok = list.includes('*') ? '*' : list.includes(origin) ? origin : list[0] ?? '';
+  // Auth is a bearer token (no cookies), so an unset allow-list safely defaults to '*'.
+  const ok = list.length === 0 || list.includes('*') ? '*' : list.includes(origin) ? origin : list[0];
   return {
     'access-control-allow-origin': ok,
     'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type',

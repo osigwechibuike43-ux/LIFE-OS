@@ -21,7 +21,7 @@ async function authHeader(): Promise<Record<string, string>> {
   if (!data.session) throw new AiError('Your session has expired. Sign in again.', 'unauthorized');
   return { authorization: `Bearer ${data.session.access_token}`, apikey: env.supabaseAnonKey, 'content-type': 'application/json' };
 }
-const endpoint = () => `${env.supabaseUrl}/functions/v1/ai-agent`;
+const endpoint = () => `${env.supabaseUrl}/functions/v1/lifeos-ai`;
 
 /** Parses an SSE byte stream into typed events. Exported for testing. */
 export async function* parseSse(body: ReadableStream<Uint8Array>): AsyncGenerator<AiStreamEvent> {

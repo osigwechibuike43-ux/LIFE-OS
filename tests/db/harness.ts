@@ -16,7 +16,8 @@ const STUBS = `
   create table auth.users (
     id uuid primary key default gen_random_uuid(),
     email text,
-    raw_user_meta_data jsonb default '{}'::jsonb
+    raw_user_meta_data jsonb default '{}'::jsonb,
+    raw_app_meta_data jsonb default '{}'::jsonb
   );
   create function auth.uid() returns uuid language sql stable as
     $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
@@ -36,9 +37,6 @@ const STUBS = `
   grant usage on schema storage to anon, authenticated, service_role;
   grant all on all tables in schema storage to authenticated, service_role;
   grant usage on schema public to anon, authenticated, service_role;
-  alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
-  alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
-  alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `;
 
 export async function createDb() {
@@ -56,7 +54,10 @@ export async function createUser(db: PGlite, email: string, meta: Record<string,
     `insert into auth.users (email, raw_user_meta_data) values ($1, $2::jsonb) returning id`,
     [email, JSON.stringify(meta)],
   );
-  return res.rows[0].id;
+  const id = res.rows[0].id;
+  // Production provisions through lifeos.ensure_profile(); this is the same code path minus auth.uid().
+  await db.query(`select lifeos.provision_user($1, $2, null, 'UTC', false)`, [id, (meta.full_name as string) ?? email.split('@')[0]]);
+  return id;
 }
 
 /** Runs `fn` as an authenticated end user, with RLS enforced, then restores the superuser role. */

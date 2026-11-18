@@ -4,7 +4,7 @@ A personal operating system: tasks, reminders, calendar, daily planner, notes, p
 
 > Your life, working together.
 
-Stack: React 19 · TypeScript · Vite · Tailwind CSS · TanStack Query · Supabase (Auth, Postgres, Storage, Edge Functions, RLS) · Groq-compatible AI (Gemini/OpenAI ready) · PWA.
+Stack: React 19 · TypeScript · Vite · Tailwind CSS · TanStack Query · Supabase (Auth, Postgres in a dedicated `lifeos` schema, Storage, Edge Functions, RLS) · Groq-compatible AI (Gemini/OpenAI ready) · PWA.
 
 ## What is in the box
 
@@ -15,7 +15,7 @@ Stack: React 19 · TypeScript · Vite · Tailwind CSS · TanStack Query · Supab
 | Memory | Facts the assistant may use. Toggle off, export, delete. Secrets and sensitive data are refused |
 | Tasks / Calendar / Planner | CRUD, priorities, categories, recurrence, month/week/day views, AI-drafted daily plan you approve |
 | Notes / Documents | Rich-text notes with sanitised HTML and full-text search. PDF/DOCX/TXT/image uploads in a private bucket, opened via short-lived signed URLs |
-| Automations | Rules with run history, executed by a scheduler (pg_cron or the `run-automations` function) |
+| Automations | Rules with run history, executed by a scheduler (pg_cron or the `lifeos-run-automations` function) |
 | Insights | Computed from your own records only. Empty data shows empty states, never invented numbers |
 | Settings | Profile, theme, notifications, AI provider, data export, account deletion, plan/entitlements |
 
@@ -50,7 +50,7 @@ src/
   hooks/ lib/ services/ types/
 supabase/
   migrations/    schema, RLS, functions, storage, cron
-  functions/     ai-agent, run-automations, send-push, delete-account, _shared
+  functions/     lifeos-ai, lifeos-run-automations, lifeos-send-push, lifeos-delete-account, _shared
 tests/           db (RLS/logic), shared (agent tools, insights), frontend
 docs/SETUP.md    deployment guide
 ```

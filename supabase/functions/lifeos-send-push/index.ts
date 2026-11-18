@@ -1,11 +1,11 @@
-// Delivers web push for notifications that have not been pushed yet. Call it every minute with the CRON_SECRET.
+// Delivers web push for notifications that have not been pushed yet. Call it every minute with the LIFEOS_CRON_SECRET.
 // Only users who enabled push AND granted browser permission have a row in push_subscriptions.
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
 import { bearer, json, safeEqual } from '../_shared/http.ts';
 
 Deno.serve(async (req) => {
-  const secret = Deno.env.get('CRON_SECRET');
+  const secret = Deno.env.get('LIFEOS_CRON_SECRET');
   const token = bearer(req);
   if (!secret || !token || !safeEqual(token, secret)) return json({ code: 'unauthorized' }, 401, {});
 
@@ -19,6 +19,7 @@ Deno.serve(async (req) => {
 
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
     auth: { persistSession: false, autoRefreshToken: false },
+    db: { schema: 'lifeos' },
   });
 
   const { data: notes, error } = await db.from('notifications')

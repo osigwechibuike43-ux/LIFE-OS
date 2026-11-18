@@ -2,9 +2,18 @@
 -- All personal tables carry user_id -> auth.users(id) ON DELETE CASCADE, so deleting
 -- an auth user removes every personal record (supports account deletion / NDPA erasure).
 
-create extension if not exists pg_trgm;
+-- LIFE OS lives in its own schema so it can share a Supabase project with other apps without
+-- touching their tables. The schema must also be listed under Settings > API > Exposed schemas.
+create schema if not exists lifeos;
+grant usage on schema lifeos to authenticated, service_role;
+alter default privileges in schema lifeos grant all on tables to authenticated, service_role;
+alter default privileges in schema lifeos grant all on sequences to authenticated, service_role;
+alter default privileges in schema lifeos grant execute on functions to authenticated, service_role;
 
-create or replace function public.set_updated_at()
+create schema if not exists extensions;
+create extension if not exists pg_trgm with schema extensions;
+
+create or replace function lifeos.set_updated_at()
 returns trigger language plpgsql as $$
 begin
   new.updated_at = now();
@@ -14,7 +23,7 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- Plans / entitlements (no payments yet: plan_id simply gates limits)
 -- ---------------------------------------------------------------------------
-create table public.plans (
+create table lifeos.plans (
   id text primary key,
   name text not null,
   description text,
@@ -22,7 +31,7 @@ create table public.plans (
   sort_order int not null default 0
 );
 
-insert into public.plans (id, name, description, limits, sort_order) values
+insert into lifeos.plans (id, name, description, limits, sort_order) values
   ('free', 'Free', 'Personal dashboard, tasks, notes, basic reminders, limited AI',
     '{"ai_messages_per_day":30,"memories":200,"documents":50,"storage_mb":100,"automations":3}', 1),
   ('pro', 'Pro', 'Advanced assistant, expanded memory, more automation',
@@ -35,7 +44,7 @@ insert into public.plans (id, name, description, limits, sort_order) values
 -- ---------------------------------------------------------------------------
 -- Profiles & preferences
 -- ---------------------------------------------------------------------------
-create table public.profiles (
+create table lifeos.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text check (char_length(display_name) <= 80),
   avatar_url text,
@@ -44,12 +53,12 @@ create table public.profiles (
   interests text[] not null default '{}',
   timezone text not null default 'UTC',
   onboarding_completed boolean not null default false,
-  plan_id text not null default 'free' references public.plans(id),
+  plan_id text not null default 'free' references lifeos.plans(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table public.user_preferences (
+create table lifeos.user_preferences (
   user_id uuid primary key references auth.users(id) on delete cascade,
   theme text not null default 'system' check (theme in ('light','dark','system')),
   notifications_in_app boolean not null default true,
@@ -66,7 +75,7 @@ create table public.user_preferences (
 );
 
 -- Provider/model choice only. API keys NEVER live in the database or the browser.
-create table public.ai_provider_settings (
+create table lifeos.ai_provider_settings (
   user_id uuid primary key references auth.users(id) on delete cascade,
   provider text not null default 'default' check (provider in ('default','groq','gemini','openai')),
   model text check (char_length(model) <= 100),
@@ -77,7 +86,7 @@ create table public.ai_provider_settings (
 -- ---------------------------------------------------------------------------
 -- Categories
 -- ---------------------------------------------------------------------------
-create table public.task_categories (
+create table lifeos.task_categories (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (char_length(name) between 1 and 60),
@@ -88,7 +97,7 @@ create table public.task_categories (
   unique (user_id, name)
 );
 
-create table public.note_categories (
+create table lifeos.note_categories (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (char_length(name) between 1 and 60),
@@ -102,10 +111,10 @@ create table public.note_categories (
 -- ---------------------------------------------------------------------------
 -- Tasks, reminders, events
 -- ---------------------------------------------------------------------------
-create table public.tasks (
+create table lifeos.tasks (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  category_id uuid references public.task_categories(id) on delete set null,
+  category_id uuid references lifeos.task_categories(id) on delete set null,
   title text not null check (char_length(title) between 1 and 300),
   description text check (char_length(description) <= 5000),
   status text not null default 'todo' check (status in ('todo','in_progress','done')),
@@ -120,15 +129,15 @@ create table public.tasks (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index tasks_user_status_due_idx on public.tasks (user_id, status, due_at);
-create index tasks_user_completed_idx on public.tasks (user_id, completed_at) where completed_at is not null;
-create index tasks_user_category_idx on public.tasks (user_id, category_id);
-create index tasks_title_trgm_idx on public.tasks using gin (title gin_trgm_ops);
+create index tasks_user_status_due_idx on lifeos.tasks (user_id, status, due_at);
+create index tasks_user_completed_idx on lifeos.tasks (user_id, completed_at) where completed_at is not null;
+create index tasks_user_category_idx on lifeos.tasks (user_id, category_id);
+create index tasks_title_trgm_idx on lifeos.tasks using gin (title extensions.gin_trgm_ops);
 
-create table public.reminders (
+create table lifeos.reminders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  task_id uuid references public.tasks(id) on delete set null,
+  task_id uuid references lifeos.tasks(id) on delete set null,
   title text not null check (char_length(title) between 1 and 300),
   description text check (char_length(description) <= 2000),
   remind_at timestamptz not null,
@@ -143,10 +152,10 @@ create table public.reminders (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index reminders_due_idx on public.reminders (remind_at) where status = 'pending' and notified_at is null;
-create index reminders_user_idx on public.reminders (user_id, status, remind_at);
+create index reminders_due_idx on lifeos.reminders (remind_at) where status = 'pending' and notified_at is null;
+create index reminders_user_idx on lifeos.reminders (user_id, status, remind_at);
 
-create table public.calendar_events (
+create table lifeos.calendar_events (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   title text not null check (char_length(title) between 1 and 300),
@@ -160,15 +169,15 @@ create table public.calendar_events (
   updated_at timestamptz not null default now(),
   check (ends_at >= starts_at)
 );
-create index events_user_start_idx on public.calendar_events (user_id, starts_at);
+create index events_user_start_idx on lifeos.calendar_events (user_id, starts_at);
 
 -- ---------------------------------------------------------------------------
 -- Notes, documents, memories
 -- ---------------------------------------------------------------------------
-create table public.notes (
+create table lifeos.notes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  category_id uuid references public.note_categories(id) on delete set null,
+  category_id uuid references lifeos.note_categories(id) on delete set null,
   title text not null default '' check (char_length(title) <= 300),
   content text not null default '' check (char_length(content) <= 200000),   -- sanitized HTML
   content_text text not null default '' check (char_length(content_text) <= 100000), -- plain text for search/AI
@@ -180,20 +189,20 @@ create table public.notes (
   search tsvector
 );
 
-create or replace function public.notes_update_search()
+create or replace function lifeos.notes_update_search()
 returns trigger language plpgsql set search_path = '' as $$
 begin
   new.search := to_tsvector('simple',
     coalesce(new.title, '') || ' ' || coalesce(new.content_text, '') || ' ' || coalesce(array_to_string(new.tags, ' '), ''));
   return new;
 end $$;
-create trigger notes_search_trg before insert or update of title, content_text, tags on public.notes
-  for each row execute function public.notes_update_search();
-create index notes_user_updated_idx on public.notes (user_id, updated_at desc);
-create index notes_search_idx on public.notes using gin (search);
-create index notes_tags_idx on public.notes using gin (tags);
+create trigger notes_search_trg before insert or update of title, content_text, tags on lifeos.notes
+  for each row execute function lifeos.notes_update_search();
+create index notes_user_updated_idx on lifeos.notes (user_id, updated_at desc);
+create index notes_search_idx on lifeos.notes using gin (search);
+create index notes_tags_idx on lifeos.notes using gin (tags);
 
-create table public.documents (
+create table lifeos.documents (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (char_length(name) between 1 and 255),
@@ -205,10 +214,10 @@ create table public.documents (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index documents_user_idx on public.documents (user_id, created_at desc);
-create index documents_name_trgm_idx on public.documents using gin (name gin_trgm_ops);
+create index documents_user_idx on lifeos.documents (user_id, created_at desc);
+create index documents_name_trgm_idx on lifeos.documents using gin (name extensions.gin_trgm_ops);
 
-create table public.memories (
+create table lifeos.memories (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   category text not null default 'user_created' check (category in
@@ -219,24 +228,24 @@ create table public.memories (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index memories_user_idx on public.memories (user_id, category, created_at desc);
-create index memories_content_trgm_idx on public.memories using gin (content gin_trgm_ops);
+create index memories_user_idx on lifeos.memories (user_id, category, created_at desc);
+create index memories_content_trgm_idx on lifeos.memories using gin (content extensions.gin_trgm_ops);
 
 -- ---------------------------------------------------------------------------
 -- Assistant
 -- ---------------------------------------------------------------------------
-create table public.conversations (
+create table lifeos.conversations (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   title text not null default 'New conversation' check (char_length(title) <= 200),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index conversations_user_idx on public.conversations (user_id, updated_at desc);
+create index conversations_user_idx on lifeos.conversations (user_id, updated_at desc);
 
-create table public.messages (
+create table lifeos.messages (
   id uuid primary key default gen_random_uuid(),
-  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  conversation_id uuid not null references lifeos.conversations(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   role text not null check (role in ('user','assistant','tool')),
   content text not null default '' check (char_length(content) <= 32000),
@@ -244,13 +253,13 @@ create table public.messages (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
-create index messages_conv_idx on public.messages (conversation_id, created_at);
+create index messages_conv_idx on lifeos.messages (conversation_id, created_at);
 
 -- Actions the assistant proposed that need the user's explicit approval before running.
-create table public.ai_pending_actions (
+create table lifeos.ai_pending_actions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  conversation_id uuid references public.conversations(id) on delete cascade,
+  conversation_id uuid references lifeos.conversations(id) on delete cascade,
   tool text not null,
   args jsonb not null,
   summary text not null,
@@ -260,12 +269,12 @@ create table public.ai_pending_actions (
   expires_at timestamptz not null default (now() + interval '1 hour'),
   resolved_at timestamptz
 );
-create index ai_pending_user_idx on public.ai_pending_actions (user_id, status, created_at desc);
+create index ai_pending_user_idx on lifeos.ai_pending_actions (user_id, status, created_at desc);
 
 -- ---------------------------------------------------------------------------
 -- Planner, automations, notifications, logs
 -- ---------------------------------------------------------------------------
-create table public.daily_plans (
+create table lifeos.daily_plans (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   plan_date date not null,
@@ -279,7 +288,7 @@ create table public.daily_plans (
   unique (user_id, plan_date)
 );
 
-create table public.automation_rules (
+create table lifeos.automation_rules (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (char_length(name) between 1 and 120),
@@ -295,12 +304,12 @@ create table public.automation_rules (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index automation_due_idx on public.automation_rules (next_run_at) where is_active;
-create index automation_user_idx on public.automation_rules (user_id);
+create index automation_due_idx on lifeos.automation_rules (next_run_at) where is_active;
+create index automation_user_idx on lifeos.automation_rules (user_id);
 
-create table public.automation_runs (
+create table lifeos.automation_runs (
   id uuid primary key default gen_random_uuid(),
-  rule_id uuid not null references public.automation_rules(id) on delete cascade,
+  rule_id uuid not null references lifeos.automation_rules(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   status text not null check (status in ('success','skipped','failed')),
   started_at timestamptz not null default now(),
@@ -308,10 +317,10 @@ create table public.automation_runs (
   result jsonb,
   error text
 );
-create index automation_runs_idx on public.automation_runs (user_id, started_at desc);
-create index automation_runs_rule_idx on public.automation_runs (rule_id, started_at desc);
+create index automation_runs_idx on lifeos.automation_runs (user_id, started_at desc);
+create index automation_runs_rule_idx on lifeos.automation_runs (rule_id, started_at desc);
 
-create table public.notifications (
+create table lifeos.notifications (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   type text not null check (type in ('reminder','automation','system','deadline')),
@@ -324,12 +333,12 @@ create table public.notifications (
   push_sent_at timestamptz,
   created_at timestamptz not null default now()
 );
-create unique index notifications_dedupe_idx on public.notifications (user_id, dedupe_key) where dedupe_key is not null;
-create index notifications_user_idx on public.notifications (user_id, created_at desc);
-create index notifications_unread_idx on public.notifications (user_id) where read_at is null;
-create index notifications_push_idx on public.notifications (created_at) where push_sent_at is null;
+create unique index notifications_dedupe_idx on lifeos.notifications (user_id, dedupe_key) where dedupe_key is not null;
+create index notifications_user_idx on lifeos.notifications (user_id, created_at desc);
+create index notifications_unread_idx on lifeos.notifications (user_id) where read_at is null;
+create index notifications_push_idx on lifeos.notifications (created_at) where push_sent_at is null;
 
-create table public.push_subscriptions (
+create table lifeos.push_subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   endpoint text not null unique,
@@ -338,10 +347,10 @@ create table public.push_subscriptions (
   user_agent text,
   created_at timestamptz not null default now()
 );
-create index push_user_idx on public.push_subscriptions (user_id);
+create index push_user_idx on lifeos.push_subscriptions (user_id);
 
 -- Audit trail. AI tool executions are recorded with source = 'ai'. Never store secrets or document contents here.
-create table public.activity_logs (
+create table lifeos.activity_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   action text not null check (char_length(action) <= 100),
@@ -351,20 +360,20 @@ create table public.activity_logs (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
-create index activity_user_idx on public.activity_logs (user_id, created_at desc);
+create index activity_user_idx on lifeos.activity_logs (user_id, created_at desc);
 
-create table public.focus_sessions (
+create table lifeos.focus_sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  task_id uuid references public.tasks(id) on delete set null,
+  task_id uuid references lifeos.tasks(id) on delete set null,
   started_at timestamptz not null default now(),
   ended_at timestamptz,
   duration_seconds int not null default 0 check (duration_seconds >= 0 and duration_seconds <= 86400),
   created_at timestamptz not null default now()
 );
-create index focus_user_idx on public.focus_sessions (user_id, started_at desc);
+create index focus_user_idx on lifeos.focus_sessions (user_id, started_at desc);
 
-create table public.rate_limits (
+create table lifeos.rate_limits (
   user_id uuid not null references auth.users(id) on delete cascade,
   bucket text not null,
   window_start timestamptz not null,
@@ -379,7 +388,7 @@ begin
   foreach t in array array['profiles','user_preferences','ai_provider_settings','tasks','reminders',
     'calendar_events','notes','documents','memories','conversations','daily_plans','automation_rules']
   loop
-    execute format('create trigger %I before update on public.%I for each row execute function public.set_updated_at()',
+    execute format('create trigger %I before update on lifeos.%I for each row execute function lifeos.set_updated_at()',
       t || '_updated_at', t);
   end loop;
 end $$;

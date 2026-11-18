@@ -115,3 +115,16 @@ describe('parseSse', () => {
     expect(ev).toEqual([{ type: 'delta', text: 'ok' }]);
   });
 });
+
+import { friendlyDbError } from '@/services/api';
+describe('friendlyDbError', () => {
+  it('explains a non-exposed schema', () => {
+    expect(friendlyDbError({ message: 'Invalid schema: lifeos', code: 'PGRST106' })).toMatch(/Exposed schemas/);
+  });
+  it('explains missing tables', () => {
+    expect(friendlyDbError({ message: 'relation "lifeos.profiles" does not exist', code: '42P01' })).toMatch(/migrations/);
+  });
+  it('passes other errors through', () => {
+    expect(friendlyDbError({ message: 'boom' })).toBe('boom');
+  });
+});
