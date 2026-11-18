@@ -63,6 +63,16 @@ describe('RLS: data isolation between users', () => {
       db.query(`update lifeos.tasks set user_id = $1 where id = $2`, [alice, t])));
   });
 
+  it('signed-in clients can call only the intended RPCs, never internal or scheduler functions', async () => {
+    for (const fn of ['lifeos.run_automations()', 'lifeos.process_due_reminders()', 'lifeos.cleanup_rate_limits()',
+      `lifeos.provision_user('${alice}', 'x', null, 'UTC', false)`, `lifeos.bump_rate_limit('${alice}', 'b', 60)`]) {
+      await expectDenied(asUser(db, alice, () => db.query(`select ${fn}`)));
+    }
+    await expectDenied(asUser(db, alice, () => db.query('truncate lifeos.tasks')));
+    const ok = await asUser(db, alice, () => db.query('select lifeos.get_entitlements() as e'));
+    expect(ok.rows.length).toBe(1);
+  });
+
   it('anonymous users cannot reach any LIFE OS data', async () => {
     await expectDenied(asAnon(db, () => db.query('select * from lifeos.tasks')));
     await expectDenied(asAnon(db, () => db.query('select id from lifeos.plans')));

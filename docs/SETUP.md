@@ -33,6 +33,8 @@ supabase functions deploy lifeos-delete-account
 Secrets: `GROQ_API_KEY` (+ optional `GEMINI_API_KEY`, `OPENAI_API_KEY`), `AI_DEFAULT_PROVIDER`, `LIFEOS_CRON_SECRET`, `VAPID_*` (optional), `LIFEOS_ALLOWED_ORIGINS` (set to your production origin, not `*`).
 `lifeos-run-automations` and `lifeos-send-push` are authenticated by `LIFEOS_CRON_SECRET` (not a user JWT), which is why they are deployed with `--no-verify-jwt`.
 
+> Hosted Supabase grants EXECUTE on new functions to `anon`/`authenticated` by default. Migration `0005` revokes that and leaves only the intended RPCs callable; do not skip it.
+
 ## 3b. Account deletion
 `Settings > Delete my data` erases only LIFE OS data (`lifeos.erase_my_data()` plus the user's files). The auth user is kept because it may be shared with other apps.
 
